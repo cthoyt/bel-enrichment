@@ -5,7 +5,7 @@
 import logging
 import os
 from collections import defaultdict
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Dict, Iterable, Mapping, Optional, Tuple
 
 import pandas as pd
 from tqdm import tqdm
@@ -27,7 +27,9 @@ def get_sheets_graph(directory,
                      *,
                      use_cached: bool = False,
                      cache_path: Optional[str] = None,
-                     **graph_metadata) -> BELGraph:
+                     use_tqdm:bool=True,
+                     graph_metadata: Optional[Mapping[str, str]] = None,
+                     ) -> BELGraph:
     """Get the BEL graph from all Google sheets.
 
     .. warning:: This BEL graph isn't pre-filled with namespace and annotation URLs.
@@ -35,23 +37,28 @@ def get_sheets_graph(directory,
     if use_cached and cache_path is not None and os.path.exists(cache_path):
         return from_pickle(cache_path)
 
-    graph = BELGraph(**graph_metadata)
+    graph = BELGraph(**(graph_metadata or {}))
     logger.info('streamlining parser')
     bel_parser = BELParser(graph)
 
-    for path in tqdm(list(get_enrichment_directories(directory)), desc='Sheets'):
+    paths = get_sheets_paths(directory)
+
+    if use_tqdm:
+        paths = tqdm(list(paths), desc='Sheets')
+
+    for path in paths:
         df = pd.read_excel(path)
 
-        # Check columns in dataframe exist
+        # Check columns in DataFrame exist
         if not _check_curation_template_columns(df, path):
             continue
 
+        graph.path = path
         for line, row in tqdm(df.iterrows(), total=len(df.index), leave=False, desc=path.split('/')[-1].split('_')[0]):
             try:
                 process_row(bel_parser, row)
             except Exception as e:
-                # logger.info('%s [line %d] - parse error: %s', path, line, e.args[0])
-                graph.warnings.append((line, path, e.args[0]))
+                graph.add_warning(e.args[0])
 
     to_pickle(graph, cache_path)
     return graph
@@ -122,7 +129,7 @@ def process_row(bel_parser: BELParser, row: Dict) -> None:
         raise Exception(bel)
 
 
-def generate_error_types(path: str) -> Tuple[dict, str]:
+def generate_error_types(path: str) -> Tuple[Mapping[str, int], str]:
     """Generate report about the types of errors INDRA made.
 
     :param path: path to the excel file
@@ -214,7 +221,7 @@ def generate_curation_summary(input_directory: str, output_directory: str):
     summary_excel_rows = {}
     error_excel_rows = {}
 
-    for path in tqdm(list(get_enrichment_directories(input_directory)), desc='Generating curation report'):
+    for path in tqdm(list(get_sheets_paths(input_directory)), desc='Generating curation report'):
         gene_symbol = path.split('/')[-2]
 
         # Subfolder name (Gene Symbol) -> dictionary results
@@ -237,7 +244,7 @@ def generate_curation_summary(input_directory: str, output_directory: str):
     df_error.to_csv(os.path.join(output_directory, 'error_types.csv'))
 
 
-def get_enrichment_directories(directory: str) -> Iterable[str]:
+def get_sheets_paths(directory: str) -> Iterable[str]:
     """List the excel curation sheets."""
     for path in os.listdir(directory):
         folder = os.path.join(directory, path)
