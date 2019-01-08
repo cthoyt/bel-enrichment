@@ -64,6 +64,7 @@ def get_and_write_statements(agents: Union[str, List[str]],
     :param sep: The separator for the CSV. Defaults to a tab.
     :param limit: The optional limit of statements to write
     :param duplicates: should duplicate statements be written (with multiple evidences?)
+    :param minimum_belief: The minimum belief score to keep
     """
     if isinstance(agents, str):
         agents = [agents]

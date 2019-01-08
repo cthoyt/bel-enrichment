@@ -24,7 +24,7 @@ def export_separate(graph: BELGraph,
                     minimum_belief: float = 0.3,
                     sep: str = '\t',
                     limit: Optional[int] = None,
-                    duplicates: bool = False
+                    duplicates: bool = False,
                     ):
     """Get genes from the graph and export in separate folders."""
     gene_symbols = get_gene_symbols(

@@ -5,7 +5,7 @@
 import logging
 import os
 from collections import defaultdict
-from typing import Dict, Iterable, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
 
 import pandas as pd
 from tqdm import tqdm
@@ -23,11 +23,12 @@ ERROR_BUT_ALSO_OTHER_STATEMENT = 'Error but other statement was identified'
 MODIFIED_BY_CURATOR = 'Modified by curator'
 
 
-def get_sheets_graph(directory,
+def get_sheets_graph(directory: str,
                      *,
                      use_cached: bool = False,
                      cache_path: Optional[str] = None,
-                     use_tqdm:bool=True,
+                     use_tqdm: bool = True,
+                     tqdm_kwargs: Optional[Mapping[str, Any]] = None,
                      graph_metadata: Optional[Mapping[str, str]] = None,
                      ) -> BELGraph:
     """Get the BEL graph from all Google sheets.
@@ -44,7 +45,9 @@ def get_sheets_graph(directory,
     paths = get_sheets_paths(directory)
 
     if use_tqdm:
-        paths = tqdm(list(paths), desc='Sheets')
+        _tqdm_kwargs = dict(desc='Sheets')
+        _tqdm_kwargs.update(tqdm_kwargs)
+        paths = tqdm(list(paths), desc='Sheets', **_tqdm_kwargs)
 
     for path in paths:
         df = pd.read_excel(path)
@@ -54,7 +57,10 @@ def get_sheets_graph(directory,
             continue
 
         graph.path = path
-        for line, row in tqdm(df.iterrows(), total=len(df.index), leave=False, desc=path.split('/')[-1].split('_')[0]):
+
+        line_rows = df.iterrows()
+        line_rows = tqdm(line_rows, total=len(df.index), leave=False, desc=path.split('/')[-1].split('_')[0])
+        for line, row in line_rows:
             try:
                 process_row(bel_parser, row)
             except Exception as e:
@@ -157,10 +163,10 @@ def generate_error_types(path: str) -> Tuple[Mapping[str, int], str]:
     return error_types, curator
 
 
-def generate_curation_report(path) -> dict:
+def generate_curation_report(path: str) -> dict:
     """Generate report about curated/non-curated statements in a given curation template.
 
-    :param str path: path to the excel file
+    :param path: path to the excel file
     :return: summary of the curation
     """
     df = pd.read_excel(path)
@@ -213,7 +219,7 @@ def generate_curation_report(path) -> dict:
 
         curation_results['Total'] += 1
 
-    return curation_results
+    return dict(curation_results)
 
 
 def generate_curation_summary(input_directory: str, output_directory: str):
