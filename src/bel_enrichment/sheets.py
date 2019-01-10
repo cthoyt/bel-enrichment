@@ -5,14 +5,16 @@
 import logging
 import os
 from collections import defaultdict
-from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
+from typing import Dict, Iterable, Mapping, Tuple
 
 import pandas as pd
+import pyparsing
 from tqdm import tqdm
 
-from pybel import BELGraph, from_pickle, to_pickle
+from pybel import BELGraph
 from pybel.constants import CITATION_REFERENCE, CITATION_TYPE, CITATION_TYPE_PUBMED
 from pybel.parser import BELParser
+from pybel.parser.exc import BELParserWarning, BELSyntaxError
 
 logger = logging.getLogger(__name__)
 
@@ -21,53 +23,6 @@ ERROR = 'Error'
 CORRECT = 'Correct'
 ERROR_BUT_ALSO_OTHER_STATEMENT = 'Error but other statement was identified'
 MODIFIED_BY_CURATOR = 'Modified by curator'
-
-
-def get_sheets_graph(directory: str,
-                     *,
-                     use_cached: bool = False,
-                     cache_path: Optional[str] = None,
-                     use_tqdm: bool = True,
-                     tqdm_kwargs: Optional[Mapping[str, Any]] = None,
-                     graph_metadata: Optional[Mapping[str, str]] = None,
-                     ) -> BELGraph:
-    """Get the BEL graph from all Google sheets.
-
-    .. warning:: This BEL graph isn't pre-filled with namespace and annotation URLs.
-    """
-    if use_cached and cache_path is not None and os.path.exists(cache_path):
-        return from_pickle(cache_path)
-
-    graph = BELGraph(**(graph_metadata or {}))
-    logger.info('streamlining parser')
-    bel_parser = BELParser(graph)
-
-    paths = get_sheets_paths(directory)
-
-    if use_tqdm:
-        _tqdm_kwargs = dict(desc='Sheets')
-        _tqdm_kwargs.update(tqdm_kwargs)
-        paths = tqdm(list(paths), desc='Sheets', **_tqdm_kwargs)
-
-    for path in paths:
-        df = pd.read_excel(path)
-
-        # Check columns in DataFrame exist
-        if not _check_curation_template_columns(df, path):
-            continue
-
-        graph.path = path
-
-        line_rows = df.iterrows()
-        line_rows = tqdm(line_rows, total=len(df.index), leave=False, desc=path.split('/')[-1].split('_')[0])
-        for line, row in line_rows:
-            try:
-                process_row(bel_parser, row)
-            except Exception as e:
-                graph.add_warning(e.args[0])
-
-    to_pickle(graph, cache_path)
-    return graph
 
 
 def _check_curation_template_columns(df: pd.DataFrame, path: str) -> bool:
@@ -91,7 +46,7 @@ def _check_curation_template_columns(df: pd.DataFrame, path: str) -> bool:
     return True
 
 
-def process_row(bel_parser: BELParser, row: Dict) -> None:
+def process_row(graph: BELGraph, bel_parser: BELParser, row: Dict, line_number: int) -> None:
     """Process a row."""
     if not row['Checked']:  # don't use unchecked material
         return
@@ -117,7 +72,7 @@ def process_row(bel_parser: BELParser, row: Dict) -> None:
     # TODO set annotations if they exist
 
     # Set annotations
-    bel_parser.control_parser.annotation_dict.update({
+    bel_parser.control_parser.annotations.update({
         'Curator': {row['Curator']},
         'INDRA_UUID': {row['INDRA UUID']},
         'Confidence': 'Medium',  # needs re-curation
@@ -130,9 +85,11 @@ def process_row(bel_parser: BELParser, row: Dict) -> None:
     bel = f"{sub} {row['Predicate']} {obj}"
 
     try:
-        bel_parser.parseString(bel)
-    except Exception:
-        raise Exception(bel)
+        bel_parser.parseString(bel, line_number=line_number)
+    except BELParserWarning as exc:
+        graph.add_warning(exc)
+    except pyparsing.ParseException as e:
+        graph.add_warning(BELSyntaxError(line_number=line_number, line=bel, position=e.loc))
 
 
 def generate_error_types(path: str) -> Tuple[Mapping[str, int], str]:
