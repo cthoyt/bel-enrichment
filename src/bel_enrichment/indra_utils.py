@@ -37,9 +37,7 @@ header = [
     'Object',
 ]
 
-Row = namedtuple('Row', ['uuid', 'belief', 'pmid', 'evidence', 'api', 'bel'])
-
-StatementRowPair = Tuple[Statement, Row]
+Row = namedtuple('Row', ['uuid', 'evidence_source_hash', 'belief', 'pmid', 'evidence', 'api', 'bel'])
 
 NO_EVIDENCE_TEXT = 'No evidence text.'
 MODIFIED_ASSERTION = 'Modified assertion'
@@ -226,6 +224,7 @@ def _get_rows_from_statement(statement: Statement) -> Iterable[Row]:
 
         yield Row(
             uuid=statement.uuid,
+            evidence_source_hash= data[ANNOTATIONS]['source_hash'],
             belief=round(statement.belief, 2),
             pmid=data[CITATION][CITATION_IDENTIFIER],
             evidence=data[EVIDENCE],
