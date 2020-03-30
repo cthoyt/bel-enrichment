@@ -5,7 +5,7 @@
 import logging
 from collections import namedtuple
 from operator import attrgetter
-from typing import Iterable, List, Optional, TextIO, Tuple, Union
+from typing import Iterable, List, Optional, TextIO, Union
 
 from indra.assemblers.pybel import PybelAssembler
 from indra.sources import indra_db_rest
