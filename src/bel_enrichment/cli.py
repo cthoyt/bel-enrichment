@@ -27,6 +27,7 @@ belief_cutoff_option = click.option(
     default=0.30,
     help='Minimum belief score. Lower gets more statements.',
 )
+only_query_option = click.option('--only-query', is_flag=True)
 
 
 @click.group()
@@ -90,28 +91,21 @@ def from_agents(agents: List[str], output: TextIO, pickle_file: BinaryIO, belief
 @pickle_output_option
 @belief_cutoff_option
 @no_duplicates_option
-@click.option('--single-pmid', is_flag=True)
+@only_query_option
 def from_pmids(
     pmids: List[str],
     output: TextIO,
     pickle_file: BinaryIO,
     belief_cutoff: float,
     no_duplicates: bool,
-    single_pmid: bool,
+    only_query: bool,
 ):
     """Make a sheet for the given PMIDs."""
-    keep_only_pmid = None
-    if single_pmid:
-        if len(pmids) != 1:
-            click.secho('Can not use --single-pmid with multiple pmids')
-            sys.exit(1)
-        keep_only_pmid = pmids[0]
-
     statements = get_and_write_statements_from_pmids(
         pmids=pmids,
         file=output,
         duplicates=(not no_duplicates),
-        keep_only_pmid=keep_only_pmid,
+        keep_only_query_pmids=only_query,
         minimum_belief=belief_cutoff,
     )
 
@@ -125,13 +119,22 @@ def from_pmids(
 @pickle_output_option
 @belief_cutoff_option
 @no_duplicates_option
-def from_pmid_file(pmids: TextIO, output: TextIO, pickle_file: BinaryIO, belief_cutoff: float, no_duplicates: bool):
+@only_query_option
+def from_pmid_file(
+    pmids: TextIO,
+    output: TextIO,
+    pickle_file: BinaryIO,
+    belief_cutoff: float,
+    no_duplicates: bool,
+    only_query: bool,
+):
     """Make a sheet for the PMIDs in the given file."""
     statements = get_and_write_statements_from_pmids(
         pmids=pmids,
         file=output,
         duplicates=(not no_duplicates),
         minimum_belief=belief_cutoff,
+        keep_only_query_pmids=only_query,
     )
 
     if pickle_file:
