@@ -47,7 +47,7 @@ def export_separate(
                 file=csv_file,
                 sep=sep,
                 limit=limit,
-                duplicates=duplicates,
+                allow_duplicates=duplicates,
                 minimum_belief=minimum_belief,
             )
         with open(pickle_path, 'wb') as pkl_file:
@@ -70,7 +70,7 @@ def export_single(
         file=file,
         sep=sep,
         limit=limit,
-        duplicates=duplicates,
+        allow_duplicates=duplicates,
     )
 
 

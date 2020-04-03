@@ -34,8 +34,9 @@ start_header = [
     'Object',
 ]
 end_header = [
-    'INDRA UUID',
-    'Source Hash',
+    'UUID',
+    'Statement Hash',
+    'Evidence Hash',
     'API',
     'Belief',
 ]
@@ -44,7 +45,8 @@ end_header = [
 @dataclass
 class Row:
     uuid: str
-    evidence_source_hash: str
+    statement_hash: str
+    evidence_hash: str
     api: str
     belief: float
     pmid: str
@@ -59,7 +61,7 @@ class Row:
 
     @property
     def end_tuple(self):
-        return self.uuid, self.evidence_source_hash, self.api, self.belief
+        return self.uuid, self.statement_hash, self.evidence_hash, self.api, self.belief
 
 
 NO_EVIDENCE_TEXT = 'No evidence text.'
@@ -67,7 +69,7 @@ MODIFIED_ASSERTION = 'Modified assertion'
 TEXT_BLACKLIST = {NO_EVIDENCE_TEXT, MODIFIED_ASSERTION}
 
 SOURCE_BLACKLIST = {'bel', 'signor'}
-SUBSTRING_BLACKLIST = {'CHEBI', 'PUBCHEM', 'act(bp('}
+SUBSTRING_BLACKLIST = {'CHEBI', 'PUBCHEM'}
 
 
 def get_and_write_statements_from_agents(
@@ -75,7 +77,8 @@ def get_and_write_statements_from_agents(
     file: Optional[TextIO] = None,
     sep: Optional[str] = None,
     limit: Optional[int] = None,
-    duplicates: bool = False,
+    allow_duplicates: bool = False,
+    allow_ungrounded: bool = True,
     minimum_belief: Optional[float] = None,
 ) -> List[Statement]:
     """Get INDRA statements for the given agents and write the to a TSV for BEL curation.
@@ -84,7 +87,8 @@ def get_and_write_statements_from_agents(
     :param file: The file to write to
     :param sep: The separator for the CSV. Defaults to a tab.
     :param limit: The optional limit of statements to write
-    :param duplicates: should duplicate statements be written (with multiple evidences?)
+    :param allow_duplicates: should duplicate statements be written (with multiple evidences?)
+    :param allow_ungrounded: should ungrounded entities be output for curation?
     :param minimum_belief: The minimum belief score to keep
     """
     if isinstance(agents, str):
@@ -98,7 +102,8 @@ def get_and_write_statements_from_agents(
         file=file,
         sep=sep,
         limit=limit,
-        duplicates=duplicates,
+        allow_duplicates=allow_duplicates,
+        allow_ungrounded=allow_ungrounded,
         minimum_belief=minimum_belief,
     )
 
@@ -138,7 +143,7 @@ def get_and_write_statements_from_pmids(
         file=file,
         sep=sep,
         limit=limit,
-        duplicates=duplicates,
+        allow_duplicates=duplicates,
         keep_only_pmids=pmids if keep_only_query_pmids else None,
         minimum_belief=minimum_belief,
         extra_columns=extra_columns,
@@ -152,9 +157,10 @@ def print_statements(
     file: Union[None, str, TextIO] = None,
     sep: Optional[str] = None,
     limit: Optional[int] = None,
-    duplicates: bool = False,
+    allow_duplicates: bool = False,
     keep_only_pmids: Union[None, str, Collection[str]] = None,
     sort_attrs: Iterable[str] = ('uuid', 'pmid'),
+    allow_ungrounded: bool = True,
     minimum_belief: Optional[float] = None,
     extra_columns: Optional[List[str]] = None,
 ) -> None:
@@ -168,10 +174,13 @@ def print_statements(
 
     statements = run_preassembly(statements)
 
+    if not allow_ungrounded:
+        statements = filter_grounded_only(statements)
+
     if minimum_belief is not None:
         statements = filter_belief(statements, minimum_belief)
 
-    rows = get_rows_from_statements(statements, duplicates=duplicates, keep_only_pmids=keep_only_pmids)
+    rows = get_rows_from_statements(statements, allow_duplicates=allow_duplicates, keep_only_pmids=keep_only_pmids)
     rows = sorted(rows, key=attrgetter(*sort_attrs))
 
     if limit is not None:
@@ -195,23 +204,27 @@ def print_statements(
 
 def get_rows_from_statements(
     statements: Iterable[Statement],
-    duplicates: bool = False,
+    allow_duplicates: bool = False,
     keep_only_pmids: Union[None, str, Collection[str]] = None,
 ) -> List[Row]:
     """Build and sort BEL curation rows from a list of statements using only the first evidence for each."""
     for statement in statements:
-        yield from get_rows_from_statement(statement, duplicates=duplicates, keep_only_pmids=keep_only_pmids)
+        yield from get_rows_from_statement(
+            statement,
+            allow_duplicates=allow_duplicates,
+            keep_only_pmids=keep_only_pmids,
+        )
 
 
 def get_rows_from_statement(
     statement: Statement,
-    duplicates: bool = True,
+    allow_duplicates: bool = True,
     keep_only_pmids: Union[None, str, Collection[str]] = None,
 ) -> Iterable[Row]:
     """Convert an INDRA statement into an iterable of BEL curation rows.
 
     :param statement: The INDRA statement
-    :param duplicates: Keep several evidences for the same INDRA statement
+    :param allow_duplicates: Keep several evidences for the same INDRA statement
     :param keep_only_pmids: If set only keeps evidences from this PMID. Warning: still might
      have multiple evidences.
     """
@@ -231,7 +244,7 @@ def get_rows_from_statement(
         ]
         # Might also be a case where several evidences from
         # same document exist, but we really only want one.
-    if not duplicates:
+    if not allow_duplicates:
         # Remove all but the first remaining evidence for the statement
         # unused_evidences = statement.evidence[1:]
         del statement.evidence[1:]
@@ -270,8 +283,9 @@ def _get_rows_from_statement(statement: Statement) -> Iterable[Row]:
             continue
 
         yield Row(
-            uuid=statement.uuid,
-            evidence_source_hash=data[ANNOTATIONS]['source_hash'],
+            uuid=data[ANNOTATIONS]['uuid'],
+            statement_hash=data[ANNOTATIONS]['stmt_hash'],
+            evidence_hash=data[ANNOTATIONS]['source_hash'],
             belief=round(statement.belief, 2),
             pmid=data[CITATION][CITATION_IDENTIFIER],
             evidence=data[EVIDENCE],
@@ -284,7 +298,7 @@ def _get_rows_from_statement(statement: Statement) -> Iterable[Row]:
 
 def get_graph_from_statement(statement: Statement) -> BELGraph:
     """Convert an INDRA statement to a BEL graph."""
-    pba = PybelAssembler([statement], allow_ungrounded=True)
+    pba = PybelAssembler([statement])
 
     try:
         graph = pba.make_model()

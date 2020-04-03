@@ -2,15 +2,17 @@
 
 """The command line interface for BEL enrichment."""
 
+import json
 import os
-import pickle
 import sys
-from typing import BinaryIO, List, TextIO
+from typing import List, TextIO
 
 import click
 
 from pybel import BELGraph
 from pybel.cli import graph_pickle_argument
+
+from indra.statements import stmts_to_json
 from .indra_utils import get_and_write_statements_from_agents, get_and_write_statements_from_pmids
 from .ranking import process_rank_genes
 from .workflow import export_separate
@@ -62,40 +64,50 @@ def from_graph(graph: BELGraph, directory: str, info_cutoff: float, belief_cutof
 
 
 output_option = click.option('--output', type=click.File('w'), default=sys.stdout, help='output file')
-pickle_output_option = click.option('--pickle-file', type=click.File('wb'), help='output file')
+statement_json_file_option = click.option('--statement-file', type=click.File('w'), help='output statements JSON file')
 no_duplicates_option = click.option('--no-duplicates', is_flag=True)
+no_ungrounded_option = click.option('--no-ungrounded', is_flag=True)
 
 
 @main.command()
 @click.option('-a', '--agents', multiple=True)
 @output_option
-@pickle_output_option
+@statement_json_file_option
 @belief_cutoff_option
 @no_duplicates_option
-def from_agents(agents: List[str], output: TextIO, pickle_file: BinaryIO, belief_cutoff: float, no_duplicates: bool):
+@no_ungrounded_option
+def from_agents(
+    agents: List[str],
+    output: TextIO,
+    statement_file: TextIO,
+    belief_cutoff: float,
+    no_duplicates: bool,
+    no_ungrounded: bool,
+):
     """Make a sheet for the given agents."""
     statements = get_and_write_statements_from_agents(
         agents=agents,
         file=output,
-        duplicates=(not no_duplicates),
+        allow_duplicates=(not no_duplicates),
+        allow_ungrounded=(not no_ungrounded),
         minimum_belief=belief_cutoff,
     )
 
-    if pickle_file:
-        pickle.dump(statements, pickle_file)
+    if statement_file:
+        json.dump(stmts_to_json(statements), statement_file, indent=2)
 
 
 @main.command()
 @click.argument('pmids', nargs=-1)
 @output_option
-@pickle_output_option
+@statement_json_file_option
 @belief_cutoff_option
 @no_duplicates_option
 @only_query_option
 def from_pmids(
     pmids: List[str],
     output: TextIO,
-    pickle_file: BinaryIO,
+    statement_file: TextIO,
     belief_cutoff: float,
     no_duplicates: bool,
     only_query: bool,
@@ -109,21 +121,21 @@ def from_pmids(
         minimum_belief=belief_cutoff,
     )
 
-    if pickle_file:
-        pickle.dump(statements, pickle_file)
+    if statement_file:
+        json.dump(stmts_to_json(statements), statement_file, indent=2)
 
 
 @main.command()
 @click.option('-f', '--file', type=click.File('r'), default=sys.stdin, help='a text file with one PMID per line')
 @output_option
-@pickle_output_option
+@statement_json_file_option
 @belief_cutoff_option
 @no_duplicates_option
 @only_query_option
 def from_pmid_file(
     pmids: TextIO,
     output: TextIO,
-    pickle_file: BinaryIO,
+    statement_file: TextIO,
     belief_cutoff: float,
     no_duplicates: bool,
     only_query: bool,
@@ -137,8 +149,8 @@ def from_pmid_file(
         keep_only_query_pmids=only_query,
     )
 
-    if pickle_file:
-        pickle.dump(statements, pickle_file)
+    if statement_file:
+        json.dump(stmts_to_json(statements), statement_file, indent=2)
 
 
 if __name__ == '__main__':
