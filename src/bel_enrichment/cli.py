@@ -9,10 +9,11 @@ from typing import List, TextIO
 
 import click
 
+import indra.util.get_version
+import pybel.version
+from indra.statements import stmts_to_json
 from pybel import BELGraph
 from pybel.cli import graph_pickle_argument
-
-from indra.statements import stmts_to_json
 from .indra_utils import get_and_write_statements_from_agents, get_and_write_statements_from_pmids
 from .ranking import process_rank_genes
 from .workflow import export_separate
@@ -31,8 +32,13 @@ belief_cutoff_option = click.option(
 )
 only_query_option = click.option('--only-query', is_flag=True)
 
+_help = (
+    f'BEL Enrichment running on PyBEL v{pybel.version.get_version()}'
+    f' and INDRA v{indra.util.get_version.get_version()}'
+)
 
-@click.group()
+
+@click.group(help=_help)
 def main():
     """BEL Enrichment."""
 
