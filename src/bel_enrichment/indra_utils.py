@@ -11,7 +11,7 @@ from typing import Collection, Iterable, List, Optional, TextIO, Union
 from indra.assemblers.pybel import PybelAssembler
 from indra.sources import indra_db_rest
 from indra.statements import Evidence, Statement
-from indra.tools.assemble_corpus import filter_belief, run_preassembly
+from indra.tools.assemble_corpus import filter_belief, filter_grounded_only, run_preassembly
 from pybel import BELGraph
 from pybel.canonicalize import edge_to_tuple
 from pybel.constants import ANNOTATIONS, CITATION, CITATION_IDENTIFIER, EVIDENCE, RELATION, UNQUALIFIED_EDGES
